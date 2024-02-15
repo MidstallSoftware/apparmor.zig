@@ -1,0 +1,11 @@
+.{
+    .name = "apparmor.zig",
+    .version = "3.1.7",
+    .paths = .{"."},
+    .dependencies = .{
+        .apparmor = .{
+            .url = "https://gitlab.com/apparmor/apparmor/-/archive/v3.1.7/apparmor-v3.1.7.tar.gz",
+            .hash = "12204c14e6f4e3481b16dd1482f1d94285ec3154a65701b767a2c062f80f62f86ce4",
+        },
+    },
+}
