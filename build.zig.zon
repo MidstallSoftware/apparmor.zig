@@ -7,5 +7,9 @@
             .url = "https://gitlab.com/apparmor/apparmor/-/archive/v3.1.7/apparmor-v3.1.7.tar.gz",
             .hash = "12204c14e6f4e3481b16dd1482f1d94285ec3154a65701b767a2c062f80f62f86ce4",
         },
+        .build = .{
+            .url = "https://github.com/ExpidusOS/build/archive/aab78d6bd30004e002361dc5e66c090719bb88a7.tar.gz",
+            .hash = "1220fe80f8f80b02213a1aa25d000f65fc889e8f8e39d0a0344a35caaef9c1b35bb7",
+        },
     },
 }

@@ -1,89 +1,5 @@
 const std = @import("std");
-
-fn evalChildProcess(s: *std.Build.Step, argv: []const []const u8, cwd: []const u8) !void {
-    const arena = s.owner.allocator;
-
-    try s.handleChildProcUnsupported(null, argv);
-    try std.Build.Step.handleVerbose(s.owner, null, argv);
-
-    const result = std.ChildProcess.run(.{
-        .allocator = arena,
-        .argv = argv,
-        .cwd = cwd,
-    }) catch |err| return s.fail("unable to spawn {s}: {s}", .{ argv[0], @errorName(err) });
-
-    if (result.stderr.len > 0) {
-        try s.result_error_msgs.append(arena, result.stderr);
-    }
-
-    try s.handleChildProcessTerm(result.term, null, argv);
-}
-
-const LexStep = struct {
-    step: std.Build.Step,
-    source: std.Build.LazyPath,
-    output_source: std.Build.GeneratedFile,
-    output_header: std.Build.GeneratedFile,
-
-    pub fn create(b: *std.Build, source: std.Build.LazyPath) *LexStep {
-        const self = b.allocator.create(LexStep) catch @panic("OOM");
-        self.* = .{
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .name = b.fmt("Lex {s}", .{source.getDisplayName()}),
-                .owner = b,
-                .makeFn = make,
-            }),
-            .source = source,
-            .output_source = .{ .step = &self.step },
-            .output_header = .{ .step = &self.step },
-        };
-
-        source.addStepDependencies(&self.step);
-        return self;
-    }
-
-    fn make(step: *std.Build.Step, _: *std.Progress.Node) anyerror!void {
-        const b = step.owner;
-        const self = @fieldParentPtr(LexStep, "step", step);
-
-        var man = b.graph.cache.obtain();
-        defer man.deinit();
-
-        _ = try man.addFile(self.source.getPath2(b, step), null);
-
-        const name = std.fs.path.stem(self.source.getPath2(b, step));
-
-        if (try step.cacheHit(&man)) {
-            const digest = man.final();
-            self.output_source.path = try b.cache_root.join(b.allocator, &.{ "o", &digest, b.fmt("{s}.c", .{name}) });
-            self.output_header.path = try b.cache_root.join(b.allocator, &.{ "o", &digest, b.fmt("{s}.h", .{name}) });
-            return;
-        }
-
-        const digest = man.final();
-        const cache_path = "o" ++ std.fs.path.sep_str ++ digest;
-
-        var cache_dir = b.cache_root.handle.makeOpenPath(cache_path, .{}) catch |err| {
-            return step.fail("unable to make path '{}{s}': {s}", .{
-                b.cache_root, cache_path, @errorName(err),
-            });
-        };
-        defer cache_dir.close();
-
-        const cmd = try b.findProgram(&.{ "flex", "lex" }, &.{});
-
-        try evalChildProcess(step, &.{
-            cmd,
-            self.source.getPath2(b, step),
-        }, try b.cache_root.join(b.allocator, &.{ "o", &digest }));
-
-        self.output_source.path = try b.cache_root.join(b.allocator, &.{ "o", &digest, b.fmt("{s}.c", .{name}) });
-        self.output_header.path = try b.cache_root.join(b.allocator, &.{ "o", &digest, b.fmt("{s}.h", .{name}) });
-
-        try step.writeManifest(&man);
-    }
-};
+const Build = @import("build");
 
 const AfProtosStep = struct {
     step: std.Build.Step,
@@ -206,10 +122,11 @@ pub fn build(b: *std.Build) !void {
 
     libapparmor.version_script = source.path("libraries/libapparmor/src/libapparmor.map");
     libapparmor.addIncludePath(source.path("libraries/libapparmor/include"));
+    libapparmor.addIncludePath(source.path("libraries/libapparmor/src"));
     libapparmor.addIncludePath(AfProtosStep.create(b, target.result).getDirectory());
 
     {
-        const lex = LexStep.create(b, source.path("libraries/libapparmor/src/scanner.l"));
+        const lex = Build.LexStep.create(b, source.path("libraries/libapparmor/src/scanner.l"));
 
         libapparmor.addIncludePath(.{ .generated_dirname = .{
             .generated = &lex.output_header,
@@ -221,6 +138,24 @@ pub fn build(b: *std.Build) !void {
         } });
 
         libapparmor.step.dependOn(&lex.step);
+    }
+
+    {
+        const yacc = Build.YaccStep.create(b, .{
+            .source = source.path("libraries/libapparmor/src/grammar.y"),
+            .prefix = "aalogparse_",
+        });
+
+        libapparmor.addIncludePath(.{ .generated_dirname = .{
+            .generated = &yacc.output_header,
+            .up = 0,
+        } });
+
+        libapparmor.addCSourceFile(.{ .file = .{
+            .generated = &yacc.output_source,
+        } });
+
+        libapparmor.step.dependOn(&yacc.step);
     }
 
     libapparmor.addCSourceFiles(.{
