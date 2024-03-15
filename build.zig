@@ -98,7 +98,7 @@ const AfProtosStep = struct {
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const linkage = b.option(std.Build.Step.Compile.Linkage, "linkage", "whether to statically or dynamically link the library") orelse .static;
+    const linkage = b.option(std.builtin.LinkMode, "linkage", "whether to statically or dynamically link the library") orelse @as(std.builtin.LinkMode, if (target.result.isGnuLibC()) .dynamic else .static);
 
     const source = b.dependency("apparmor", .{});
 
@@ -159,14 +159,15 @@ pub fn build(b: *std.Build) !void {
     }
 
     libapparmor.addCSourceFiles(.{
+        .root = source.path("libraries/libapparmor/src"),
         .files = &.{
-            source.path("libraries/libapparmor/src/libaalogparse.c").getPath(source.builder),
-            source.path("libraries/libapparmor/src/kernel.c").getPath(source.builder),
-            source.path("libraries/libapparmor/src/private.c").getPath(source.builder),
-            source.path("libraries/libapparmor/src/features.c").getPath(source.builder),
-            source.path("libraries/libapparmor/src/kernel_interface.c").getPath(source.builder),
-            source.path("libraries/libapparmor/src/policy_cache.c").getPath(source.builder),
-            source.path("libraries/libapparmor/src/PMurHash.c").getPath(source.builder),
+            "libaalogparse.c",
+            "kernel.c",
+            "private.c",
+            "features.c",
+            "kernel_interface.c",
+            "policy_cache.c",
+            "PMurHash.c",
         },
         .flags = &.{"-D_GNU_SOURCE"},
     });
